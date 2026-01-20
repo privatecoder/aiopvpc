@@ -11,9 +11,18 @@ DATE_CHANGE_TO_20TD = date(2021, 6, 1)
 TARIFF_20TD_IDS = ["PCB", "CYM"]
 
 # Tariff names used in HomeAssistant integration
-TARIFFS = ["2.0TD", "2.0TD (Ceuta/Melilla)"]
+TARIFFS = ["2.0TD Península / Baleares / Canarias", "2.0TD Ceuta / Melilla"]
+LEGACY_TARIFFS = ["2.0TD", "2.0TD (Ceuta/Melilla)"]
 
 TARIFF2ID = dict(zip(TARIFFS, TARIFF_20TD_IDS))
+TARIFF2ID.update(dict(zip(LEGACY_TARIFFS, TARIFF_20TD_IDS)))
+TARIFF_ALIASES = dict(zip(LEGACY_TARIFFS, TARIFFS))
+
+
+def normalize_tariff(tariff: str) -> str:
+    """Return canonical tariff name for storage and comparisons."""
+    return TARIFF_ALIASES.get(tariff, tariff)
+
 
 # Contracted power
 DEFAULT_POWER_KW = 3.3

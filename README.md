@@ -1,9 +1,3 @@
-[![PyPI Version][pypi-image]][pypi-url]
-[![pre-commit.ci Status][pre-commit-ci-image]][pre-commit-ci-url]
-[![Build Status][build-image]][build-url]
-
-<!-- Badges -->
-
 [pypi-image]: https://img.shields.io/pypi/v/aiopvpc
 [pypi-url]: https://pypi.org/project/aiopvpc/
 [pre-commit-ci-image]: https://results.pre-commit.ci/badge/github/azogue/aiopvpc/master.svg
@@ -11,29 +5,31 @@
 [build-image]: https://github.com/azogue/aiopvpc/actions/workflows/main.yml/badge.svg
 [build-url]: https://github.com/azogue/aiopvpc/actions/workflows/main.yml
 
-# aiopvpc
+# aiopvpc (fork for PVPC Next)
 
 Simple aio library to download Spanish electricity hourly prices.
 
-Made to support the [**`pvpc_hourly_pricing`** HomeAssistant integration](https://www.home-assistant.io/integrations/pvpc_hourly_pricing/).
-
-<span class="badge-buymeacoffee"><a href="https://www.buymeacoffee.com/azogue" title="Donate to this project using Buy Me A Coffee"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg" alt="Buy Me A Coffee donate button" /></a></span>
+Made to support the [**`PVPC Next`** HomeAssistant integration](https://github.com/privatecoder/ha-pvpc-next).
 
 ## Install
 
-Install with `pip install aiopvpc` or clone it to run tests or anything else.
+Install with `poetry install` or `pip install git+https://github.com/privatecoder/aiopvpc.git@v4.3.2` clone it to run tests or anything else.
 
 ## Usage
 
 ```python
+import asyncio
 import aiohttp
 from datetime import datetime
 from aiopvpc import PVPCData
 
-async with aiohttp.ClientSession() as session:
-    pvpc_handler = PVPCData(session=session, tariff="2.0TD")
-    esios_data = await pvpc_handler.async_update_all(
-        current_data=None, now=datetime.utcnow()
-    )
-print(esios_data.sensors["PVPC"])
+async def main():
+    async with aiohttp.ClientSession() as session:
+        pvpc_handler = PVPCData(session=session, tariff="2.0TD")
+        esios_data = await pvpc_handler.async_update_all(
+            current_data=None, now=datetime.utcnow()
+        )
+        print(esios_data.sensors["PVPC"])
+
+asyncio.run(main())
 ```

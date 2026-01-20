@@ -1,4 +1,5 @@
 """Home Assistant helper methods."""
+# pylint: disable=duplicate-code
 
 from aiopvpc.const import (
     ALL_SENSORS,
@@ -8,24 +9,19 @@ from aiopvpc.const import (
     KEY_MAG,
     KEY_OMIE,
     KEY_PVPC,
+    LEGACY_TARIFFS,
     TARIFFS,
 )
 
+_TARIFF_IDS = (*TARIFFS, *LEGACY_TARIFFS)
 _ha_uniqueid_to_sensor_key = {
-    TARIFFS[0]: KEY_PVPC,
-    TARIFFS[1]: KEY_PVPC,
-    f"{TARIFFS[0]}_{KEY_INJECTION}": KEY_INJECTION,
-    f"{TARIFFS[1]}_{KEY_INJECTION}": KEY_INJECTION,
-    f"{TARIFFS[0]}_INYECTION": KEY_INJECTION,
-    f"{TARIFFS[1]}_INYECTION": KEY_INJECTION,
-    f"{TARIFFS[0]}_{KEY_MAG}": KEY_MAG,
-    f"{TARIFFS[1]}_{KEY_MAG}": KEY_MAG,
-    f"{TARIFFS[0]}_{KEY_OMIE}": KEY_OMIE,
-    f"{TARIFFS[1]}_{KEY_OMIE}": KEY_OMIE,
-    f"{TARIFFS[0]}_{KEY_ADJUSTMENT}": KEY_ADJUSTMENT,
-    f"{TARIFFS[1]}_{KEY_ADJUSTMENT}": KEY_ADJUSTMENT,
-    f"{TARIFFS[0]}_{KEY_INDEXED}": KEY_INDEXED,
-    f"{TARIFFS[1]}_{KEY_INDEXED}": KEY_INDEXED,
+    **{tariff: KEY_PVPC for tariff in _TARIFF_IDS},
+    **{f"{tariff}_{KEY_INJECTION}": KEY_INJECTION for tariff in _TARIFF_IDS},
+    **{f"{tariff}_INYECTION": KEY_INJECTION for tariff in _TARIFF_IDS},
+    **{f"{tariff}_{KEY_MAG}": KEY_MAG for tariff in _TARIFF_IDS},
+    **{f"{tariff}_{KEY_OMIE}": KEY_OMIE for tariff in _TARIFF_IDS},
+    **{f"{tariff}_{KEY_ADJUSTMENT}": KEY_ADJUSTMENT for tariff in _TARIFF_IDS},
+    **{f"{tariff}_{KEY_INDEXED}": KEY_INDEXED for tariff in _TARIFF_IDS},
 }
 
 
@@ -35,7 +31,7 @@ def get_enabled_sensor_keys(
     """(HA) Get enabled API indicators."""
     sensor_keys = set(ALL_SENSORS) if using_private_api else {KEY_PVPC}
     for unique_id in disabled_sensor_ids:
-        disabled_ind = _ha_uniqueid_to_sensor_key[unique_id]
+        disabled_ind = _ha_uniqueid_to_sensor_key.get(unique_id)
         if disabled_ind in sensor_keys:
             sensor_keys.remove(disabled_ind)
 

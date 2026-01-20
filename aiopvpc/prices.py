@@ -5,7 +5,7 @@ from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
-from .const import EsiosApiData, KEY_ADJUSTMENT, KEY_INDEXED, KEY_INJECTION, KEY_PVPC
+from aiopvpc.const import EsiosApiData, KEY_ADJUSTMENT, KEY_INDEXED, KEY_INJECTION, KEY_PVPC
 
 
 def _is_tomorrow_price(ts: datetime, ref: datetime) -> bool:
@@ -45,7 +45,7 @@ def _make_price_tag_attributes(
     return attributes
 
 
-def _make_price_stats_attributes(
+def _make_price_stats_attributes(  # pylint: disable=too-many-locals
     sensor_key: str,
     current_price: float,
     current_prices: dict[datetime, float],

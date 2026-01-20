@@ -5,6 +5,7 @@ Simple aio library to download Spanish electricity hourly prices.
 * Parser for the contents of the JSON files
 """
 
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from itertools import groupby
 from operator import itemgetter
@@ -120,7 +121,7 @@ def extract_esios_data(
         return extract_prices_from_esios_public(data, TARIFF2ID[tariff], tz)
 
     if url.startswith("https://api.esios.ree.es/indicators"):
-        # TODO adapt better to geozones
+        # NOTE: Geozone selection can be expanded if needed.
         if tariff == TARIFFS[0] and tz != REFERENCE_TZ:
             geo_zone = GEOZONES[1]
         elif tariff == TARIFFS[0]:
@@ -134,13 +135,14 @@ def extract_esios_data(
 
 def get_daily_urls_to_download(
     source: DataSource,
-    sensor_keys: set[str],
+    sensor_keys: Iterable[str],
     now_local_ref: datetime,
     next_day_local_ref: datetime,
 ) -> tuple[list[str], list[str]]:
     """Make URLs for ESIOS price series."""
+    sensor_keys = list(sensor_keys)
     if source == "esios_public":
-        assert sensor_keys == {KEY_PVPC}
+        assert set(sensor_keys) == {KEY_PVPC}
         return (
             [URL_PUBLIC_PVPC_RESOURCE.format(day=now_local_ref.date())],
             [URL_PUBLIC_PVPC_RESOURCE.format(day=next_day_local_ref.date())],

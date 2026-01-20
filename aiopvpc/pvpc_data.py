@@ -1,7 +1,7 @@
 """
 Simple aio library to download Spanish electricity hourly prices.
 
-Externalization of download and parsing logic for the `pvpc_hourly_pricing`
+Externalization of download and parsing logic for the `pvpc_next`
 HomeAssistant integration,
 https://www.home-assistant.io/integrations/pvpc_hourly_pricing/
 """
@@ -32,17 +32,19 @@ from aiopvpc.const import (
     SENSOR_KEY_TO_DATAID,
     TARIFFS,
     UTC_TZ,
+    normalize_tariff,
     zoneinfo,
 )
 from aiopvpc.parser import extract_esios_data, get_daily_urls_to_download
 from aiopvpc.prices import add_composed_price_sensors, make_price_sensor_attributes
-from aiopvpc.pvpc_tariff import get_current_and_next_tariff_periods
+from aiopvpc.pvpc_tariff import (
+    get_current_and_next_power_periods,
+    get_current_and_next_price_periods,
+)
 from aiopvpc.utils import ensure_utc_time
 
 _LOGGER = logging.getLogger(__name__)
 
-# TODO REMOVE THIS USER-AGENT LOGIC
-# 🙈😱 Use randomized standard User-Agent info to avoid server banning 😖🤷
 _STANDARD_USER_AGENTS = [
     (
         "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) "
@@ -67,10 +69,8 @@ _STANDARD_USER_AGENTS = [
 class BadApiTokenAuthError(Exception):
     """Exception to signal HA that ESIOS API token is invalid (401 status)."""
 
-    pass  # noqa PIE790
 
-
-class PVPCData:
+class PVPCData:  # pylint: disable=too-many-instance-attributes
     """
     Data handler for PVPC hourly prices.
 
@@ -81,7 +81,7 @@ class PVPCData:
     with timestamps in UTC and prices in €/kWh.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
         session: aiohttp.ClientSession,
@@ -109,6 +109,7 @@ class PVPCData:
         self._user_agents = deque(sorted(_STANDARD_USER_AGENTS, key=lambda _: random()))
 
         self._local_timezone = zoneinfo.ZoneInfo(str(local_timezone))
+        tariff = normalize_tariff(tariff)
         assert tariff in TARIFFS
         self.tariff = tariff
 
@@ -133,29 +134,33 @@ class PVPCData:
             headers["Authorization"] = f"Token token={self._api_token}"
 
         assert self._session is not None
-        resp = await self._session.get(url, headers=headers)
-        if resp.status < 400:
-            data = await resp.json()
-            return extract_esios_data(
-                data, url, sensor_key, self.tariff, tz=self._local_timezone
-            )
-        elif resp.status in (401, 403) and self._data_source == "esios":
-            _LOGGER.warning(
-                "[%s] Unauthorized error with '%s': %s",
-                sensor_key,
-                self._data_source,
-                url,
-            )
-            raise BadApiTokenAuthError(
-                f"[{sensor_key}] Unauthorized access with API token '{self._api_token}'"
-            )
-        elif resp.status == 403:  # pragma: no cover
-            _LOGGER.warning(
-                "[%s] Forbidden error with '%s': %s", sensor_key, self._data_source, url
-            )
-            # loop user-agent and data-source
-            self._user_agents.rotate()
-        else:
+        async with self._session.get(url, headers=headers) as resp:
+            if resp.status < 400:
+                data = await resp.json()
+                return extract_esios_data(
+                    data, url, sensor_key, self.tariff, tz=self._local_timezone
+                )
+            if resp.status in (401, 403) and self._data_source == "esios":
+                _LOGGER.warning(
+                    "[%s] Unauthorized error with '%s': %s",
+                    sensor_key,
+                    self._data_source,
+                    url,
+                )
+                raise BadApiTokenAuthError(
+                    f"[{sensor_key}] Unauthorized access with API token '{self._api_token}'"
+                )
+            if resp.status == 403:  # pragma: no cover
+                _LOGGER.warning(
+                    "[%s] Forbidden error with '%s': %s",
+                    sensor_key,
+                    self._data_source,
+                    url,
+                )
+                # loop user-agent and data-source
+                self._user_agents.rotate()
+                return None
+
             _LOGGER.error(
                 "[%s] Unknown error [%d] with '%s': %s",
                 sensor_key,
@@ -163,7 +168,7 @@ class PVPCData:
                 self._data_source,
                 url,
             )
-        return None
+            return None
 
     async def _download_daily_data(
         self, sensor_key: str, url: str
@@ -176,8 +181,34 @@ class PVPCData:
         Prices are referenced with datetimes in UTC.
         """
         try:
+            _LOGGER.debug("[%s] Requesting %s", sensor_key, url)
             async with async_timeout.timeout(self._timeout):
-                return await self._api_get_data(sensor_key, url)
+                response = await self._api_get_data(sensor_key, url)
+                if _LOGGER.isEnabledFor(logging.DEBUG) and response is not None:
+                    _LOGGER.debug(
+                        "[%s] Response meta name=%s data_id=%s unit=%s last_update=%s",
+                        sensor_key,
+                        response.name,
+                        response.data_id,
+                        response.unit,
+                        response.last_update,
+                    )
+                    for series_key, series in response.series.items():
+                        _LOGGER.debug(
+                            "[%s] Response series=%s points=%d",
+                            sensor_key,
+                            series_key,
+                            len(series),
+                        )
+                        for ts, price in sorted(series.items()):
+                            _LOGGER.debug(
+                                "[%s] Response point series=%s ts=%s price=%.5f",
+                                sensor_key,
+                                series_key,
+                                ts.isoformat(),
+                                price,
+                            )
+                return response
         except (AttributeError, KeyError) as exc:
             _LOGGER.debug("[%s] Bad try on getting prices (%s)", sensor_key, exc)
         except asyncio.TimeoutError:
@@ -186,8 +217,6 @@ class PVPCData:
             )
         except aiohttp.ClientError as exc:
             _LOGGER.warning("[%s] Client error in '%s' -> %s", sensor_key, url, exc)
-        except BadApiTokenAuthError:
-            raise
         return None
 
     async def check_api_token(
@@ -218,7 +247,7 @@ class PVPCData:
         elif data_id in self._sensor_keys:
             self._sensor_keys.remove(data_id)
 
-    async def async_update_all(
+    async def async_update_all(  # pylint: disable=too-many-locals
         self, current_data: EsiosApiData | None, now: datetime
     ) -> EsiosApiData:
         """
@@ -240,11 +269,13 @@ class PVPCData:
                 last_update=utc_now,
             )
 
-        api_sensors = {
-            api_sensor_key
-            for sensor_key in self._sensor_keys
-            for api_sensor_key in SENSOR_KEY_TO_API_SERIES[sensor_key]
-        }
+        api_sensors = sorted(
+            {
+                api_sensor_key
+                for sensor_key in self._sensor_keys
+                for api_sensor_key in SENSOR_KEY_TO_API_SERIES[sensor_key]
+            }
+        )
         urls_now, urls_next = get_daily_urls_to_download(
             self._data_source,
             api_sensors,
@@ -283,7 +314,7 @@ class PVPCData:
             self.process_state_and_attributes(current_data, sensor_key, now)
         return current_data
 
-    async def _update_prices_series(
+    async def _update_prices_series(  # pylint: disable=too-many-arguments
         self,
         sensor_key: str,
         current_prices: dict[datetime, float],
@@ -301,9 +332,8 @@ class PVPCData:
                 next(iter(current_prices)).strftime("%Y-%m-%d %Hh"),
             )
             return None
-        elif (
-            local_ref_now.hour < 20
-            and current_num_prices > 20
+        if (
+            local_ref_now.hour < 20 < current_num_prices
             and (
                 list(current_prices)[-12].astimezone(REFERENCE_TZ).date()
                 == local_ref_now.date()
@@ -334,7 +364,16 @@ class PVPCData:
         else:
             # make API call to download today prices
             prices_response = await self._download_daily_data(sensor_key, url_now)
-            if prices_response is None or not prices_response.series.get(sensor_key):
+            if prices_response is None:
+                _LOGGER.debug("[%s] No response for %s", sensor_key, url_now)
+                return current_prices
+            if not prices_response.series.get(sensor_key):
+                _LOGGER.debug(
+                    "[%s] Response missing series for %s (keys=%s)",
+                    sensor_key,
+                    url_now,
+                    list(prices_response.series),
+                )
                 return current_prices
             prices = prices_response.series[sensor_key]
             current_prices.update(prices)
@@ -342,16 +381,29 @@ class PVPCData:
         # At evening, it is possible to retrieve next day prices
         if local_ref_now.hour >= 20:
             prices_fut_response = await self._download_daily_data(sensor_key, url_next)
-            if prices_fut_response:
+            if prices_fut_response is None:
+                _LOGGER.debug("[%s] No response for %s", sensor_key, url_next)
+            elif not prices_fut_response.series.get(sensor_key):
+                _LOGGER.debug(
+                    "[%s] Next-day response missing series for %s (keys=%s)",
+                    sensor_key,
+                    url_next,
+                    list(prices_fut_response.series),
+                )
+            else:
                 prices_fut = prices_fut_response.series[sensor_key]
                 current_prices.update(prices_fut)
 
-        _LOGGER.debug(
-            "[%s] Download done, now with %d prices from %s UTC",
-            sensor_key,
-            len(current_prices),
-            next(iter(current_prices)).strftime("%Y-%m-%d %Hh"),
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG) and current_prices:
+            min_ts = min(current_prices)
+            max_ts = max(current_prices)
+            _LOGGER.debug(
+                "[%s] Download done, %d prices %s..%s UTC",
+                sensor_key,
+                len(current_prices),
+                min_ts.strftime("%Y-%m-%d %Hh"),
+                max_ts.strftime("%Y-%m-%d %Hh"),
+            )
 
         return current_prices
 
@@ -398,6 +450,23 @@ class PVPCData:
         except KeyError:
             self.states[sensor_key] = None
             current_data.availability[sensor_key] = False
+            if current_prices:
+                first_ts = min(current_prices)
+                last_ts = max(current_prices)
+                _LOGGER.debug(
+                    "[%s] Missing price for %s; available range %s..%s (%d prices)",
+                    sensor_key,
+                    utc_time,
+                    first_ts,
+                    last_ts,
+                    len(current_prices),
+                )
+            else:
+                _LOGGER.debug(
+                    "[%s] No prices available to compute state at %s",
+                    sensor_key,
+                    utc_time,
+                )
             self.sensor_attributes[sensor_key] = attributes
             return False
 
@@ -413,12 +482,22 @@ class PVPCData:
                 current_period,
                 next_period,
                 delta,
-            ) = get_current_and_next_tariff_periods(
+            ) = get_current_and_next_price_periods(
                 local_time, zone_ceuta_melilla=self.tariff != TARIFFS[0]
             )
             attributes["tariff"] = self.tariff
             attributes["period"] = current_period
-            power = self._power_valley if current_period == "P3" else self._power
+            power_period, next_power_period, power_delta = (
+                get_current_and_next_power_periods(
+                    local_time, zone_ceuta_melilla=self.tariff != TARIFFS[0]
+                )
+            )
+            attributes["power_period"] = power_period
+            attributes["next_power_period"] = next_power_period
+            attributes["hours_to_next_power_period"] = (
+                int(power_delta.total_seconds()) // 3600
+            )
+            power = self._power if power_period == "P1" else self._power_valley
             attributes["available_power"] = int(1000 * power)
             attributes["next_period"] = next_period
             attributes["hours_to_next_period"] = int(delta.total_seconds()) // 3600
