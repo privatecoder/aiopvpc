@@ -4,7 +4,8 @@
 
 [Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v4.3.3...v4.3.4)
 
-- 🐛 Fix `async_timeout` dependency, incompatible with the pinned version in HA core (`async-timeout==4.0.3`)
+- 🐛 Fix `async_timeout` dependency (also loosened `aiohttp`), incompatible with the pinned version in HA core (`async-timeout==4.0.3`)
+- 🐛 Loosened `aiohttp` dependency for compatibility with older HA versions
 
 ## [v4.3.3](https://github.com/privatecoder/aiopvpc/tree/v4.3.3) - 🚀 Bump dependencies (2026-01-27)
 
