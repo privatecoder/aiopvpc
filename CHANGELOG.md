@@ -1,11 +1,5 @@
 # Changelog
 
-## [v4.3.3](https://github.com/privatecoder/aiopvpc/tree/v4.3.3) - 🚀 Bump dependencies (2026-01-27)
-
-[Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v4.3.2...v4.3.3)
-
-- 🚀 Bump min-version of (dev-) dependencies, especially holidays, to ensure up-to-date Holidays for Spain
-
 ## [v4.3.2](https://github.com/privatecoder/aiopvpc/tree/v4.3.2) - 🐛 Fix _no hardcoded holidays for 2026_ (2026-01-20)
 
 [Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v4.3.1...v4.3.2)

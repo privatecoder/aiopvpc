@@ -13,7 +13,7 @@ Made to support the [**`PVPC Next`** HomeAssistant integration](https://github.c
 
 ## Install
 
-Install with `poetry install` or `pip install git+https://github.com/privatecoder/aiopvpc.git@v4.3.3` clone it to run tests or anything else.
+Install with `poetry install` or `pip install git+https://github.com/privatecoder/aiopvpc.git@v4.3.2` clone it to run tests or anything else.
 
 ## Usage
 
