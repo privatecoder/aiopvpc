@@ -93,7 +93,7 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
         timeout: float = DEFAULT_TIMEOUT,
         data_source: DataSource = "esios_public",
         api_token: str | None = None,
-        holiday_source: HolidaySource = "python-holidays",
+        holiday_source: HolidaySource = "csv",
         sensor_keys: tuple[str, ...] = (KEY_PVPC,),
     ) -> None:
         """Set up API access."""

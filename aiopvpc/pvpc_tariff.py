@@ -8,7 +8,7 @@ from typing import Literal
 from pvpc_holidays import get_pvpc_holidays
 
 HolidaySource = Literal["csv", "python-holidays"]
-DEFAULT_HOLIDAY_SOURCE: HolidaySource = "python-holidays"
+DEFAULT_HOLIDAY_SOURCE: HolidaySource = "csv"
 
 _PRICE_HOURS_P1_PCB = (10, 11, 12, 13, 18, 19, 20, 21)
 _PRICE_HOURS_P2_PCB = (8, 9, 14, 15, 16, 17, 22, 23)
