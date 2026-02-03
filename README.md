@@ -1,10 +1,3 @@
-[pypi-image]: https://img.shields.io/pypi/v/aiopvpc
-[pypi-url]: https://pypi.org/project/aiopvpc/
-[pre-commit-ci-image]: https://results.pre-commit.ci/badge/github/azogue/aiopvpc/master.svg
-[pre-commit-ci-url]: https://results.pre-commit.ci/latest/github/azogue/aiopvpc/master
-[build-image]: https://github.com/azogue/aiopvpc/actions/workflows/main.yml/badge.svg
-[build-url]: https://github.com/azogue/aiopvpc/actions/workflows/main.yml
-
 # aiopvpc (fork for PVPC Next)
 
 Simple aio library to download Spanish electricity hourly prices.
@@ -15,7 +8,7 @@ Made to support the [**`PVPC Next`** HomeAssistant integration](https://github.c
 
 ## Install
 
-Install with `poetry install` or `pip install git+https://github.com/privatecoder/aiopvpc.git@v4.3.4` clone it to run tests or anything else.
+Install with `poetry install` or `pip install git+https://github.com/privatecoder/aiopvpc.git@v5.0.0` clone it to run tests or anything else.
 
 ---
 
