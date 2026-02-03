@@ -39,6 +39,7 @@ from aiopvpc.parser import extract_esios_data, get_daily_urls_to_download
 from aiopvpc.prices import add_composed_price_sensors, make_price_sensor_attributes
 from aiopvpc.pvpc_tariff import (
     HolidaySource,
+    _national_p3_holidays,
     get_current_and_next_power_periods,
     get_current_and_next_price_periods,
 )
@@ -118,6 +119,7 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
 
         self._power = power
         self._power_valley = power_valley
+        self._warmed_holiday_years: set[int] = set()
 
     @property
     def using_private_api(self) -> bool:
@@ -312,10 +314,32 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
             current_data.data_source = self._data_source
             current_data.last_update = utc_now
 
+        if KEY_PVPC in current_data.sensors:
+            local_now = utc_now.astimezone(self._local_timezone)
+            await self._async_prewarm_holidays(local_now)
+
         add_composed_price_sensors(current_data)
         for sensor_key in current_data.sensors:
             self.process_state_and_attributes(current_data, sensor_key, now)
         return current_data
+
+    async def _async_prewarm_holidays(self, local_now: datetime) -> None:
+        """Populate holiday cache off-loop to avoid blocking in period helpers."""
+        for year in (local_now.year, local_now.year + 1):
+            if year in self._warmed_holiday_years:
+                continue
+            national_holidays = await asyncio.to_thread(
+                _national_p3_holidays,
+                year,
+                self._holiday_source,
+            )
+            self._warmed_holiday_years.add(year)
+            _LOGGER.debug(
+                "Holiday warmup year=%d source=%s count=%d",
+                year,
+                self._holiday_source,
+                len(national_holidays),
+            )
 
     async def _update_prices_series(  # pylint: disable=too-many-arguments
         self,
