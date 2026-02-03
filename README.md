@@ -11,9 +11,13 @@ Simple aio library to download Spanish electricity hourly prices.
 
 Made to support the [**`PVPC Next`** HomeAssistant integration](https://github.com/privatecoder/ha-pvpc-next).
 
+---
+
 ## Install
 
 Install with `poetry install` or `pip install git+https://github.com/privatecoder/aiopvpc.git@v4.3.4` clone it to run tests or anything else.
+
+---
 
 ## Usage
 
@@ -33,3 +37,20 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### Tariff period CLI
+
+The package also exposes a small CLI to inspect tariff periods and holiday source:
+
+```bash
+# default source is csv
+poetry run aiopvpc-tariff
+poetry run aiopvpc-tariff --source csv
+poetry run aiopvpc-tariff --source python-holidays
+```
+
+---
+
+## License
+
+MIT License. See the [LICENSE](LICENSE) file.

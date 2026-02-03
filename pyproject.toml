@@ -56,6 +56,7 @@ python = ">=3.10,<4.0"
 aiohttp = ">=3.7.4.post0,<4.0.0"
 async_timeout = ">=3.0.1,<6.0.0"
 holidays = ">=0.89,<1.0"
+spanish-pvpc-holidays = { git = "https://github.com/privatecoder/spanish-pvpc-holidays.git", rev = "v1.0.0" }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.2"
@@ -65,6 +66,9 @@ pytest-sugar = "^1.1.1"
 pytest-timeout = "^2.4.0"
 pre-commit = "^4.5.1"
 python-dotenv = "^1.2.1"
+
+[tool.poetry.scripts]
+aiopvpc-tariff = "aiopvpc.cli:main"
 
 [build-system]
 requires = ["poetry_core>=1.0.0"]

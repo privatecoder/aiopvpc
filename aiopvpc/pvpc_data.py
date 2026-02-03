@@ -38,6 +38,7 @@ from aiopvpc.const import (
 from aiopvpc.parser import extract_esios_data, get_daily_urls_to_download
 from aiopvpc.prices import add_composed_price_sensors, make_price_sensor_attributes
 from aiopvpc.pvpc_tariff import (
+    HolidaySource,
     get_current_and_next_power_periods,
     get_current_and_next_price_periods,
 )
@@ -92,6 +93,7 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
         timeout: float = DEFAULT_TIMEOUT,
         data_source: DataSource = "esios_public",
         api_token: str | None = None,
+        holiday_source: HolidaySource = "python-holidays",
         sensor_keys: tuple[str, ...] = (KEY_PVPC,),
     ) -> None:
         """Set up API access."""
@@ -103,6 +105,7 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
         self._session = session
         self._data_source = data_source
         self._api_token = api_token
+        self._holiday_source = holiday_source
         if self._api_token is not None:
             self._data_source = "esios"
         assert (data_source != "esios") or self._api_token is not None, data_source
@@ -483,13 +486,17 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
                 next_period,
                 delta,
             ) = get_current_and_next_price_periods(
-                local_time, zone_ceuta_melilla=self.tariff != TARIFFS[0]
+                local_time,
+                zone_ceuta_melilla=self.tariff != TARIFFS[0],
+                holiday_source=self._holiday_source,
             )
             attributes["tariff"] = self.tariff
             attributes["period"] = current_period
             power_period, next_power_period, power_delta = (
                 get_current_and_next_power_periods(
-                    local_time, zone_ceuta_melilla=self.tariff != TARIFFS[0]
+                    local_time,
+                    zone_ceuta_melilla=self.tariff != TARIFFS[0],
+                    holiday_source=self._holiday_source,
                 )
             )
             attributes["power_period"] = power_period
