@@ -1,5 +1,12 @@
 # Changelog
 
+## [v4.3.6](https://github.com/privatecoder/aiopvpc/tree/v4.3.6) - 🚀 Replace holidays with spanish-pvpc-holidays (2026-02-03)
+
+[Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v4.3.4...v4.3.6)
+
+- ✨ **Replace [holidays library](https://pypi.org/project/holidays/) with [spanish-pvpc-holidays](https://github.com/privatecoder/spanish-pvpc-holidays)** as for PVPC pricing in 2.0 TD tariffs, there are some additional rules for holidays that count as such.
+- ✨ Add some CLI tests
+
 ## [v4.3.4](https://github.com/privatecoder/aiopvpc/tree/v4.3.4) - 🚀 Bump dependencies (2026-01-28)
 
 [Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v4.3.3...v4.3.4)

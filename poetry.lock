@@ -1189,7 +1189,7 @@ files = [
 
 [[package]]
 name = "spanish-pvpc-holidays"
-version = "0.1.0"
+version = "1.1.0"
 description = "Spanish PVPC P3/valle holidays with strict filtering rules"
 optional = false
 python-versions = ">=3.10,<4.0"
@@ -1198,13 +1198,13 @@ files = []
 develop = false
 
 [package.extras]
-holidays = ["holidays (>=0.55)"]
+holidays = ["holidays (>=0.89)"]
 
 [package.source]
 type = "git"
 url = "https://github.com/privatecoder/spanish-pvpc-holidays.git"
-reference = "v1.0.0"
-resolved_reference = "a831dc003e15527e78ff3b07ef4448461e25d20e"
+reference = "v1.1.0"
+resolved_reference = "b2763bb7fab7dacc9058378ce5a02482511cc052"
 
 [[package]]
 name = "termcolor"
@@ -1462,4 +1462,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "16cd1d8ffc401a08442b135bd9ad35724dbad6920946fbe8c15deac1d43bd98c"
+content-hash = "01e235b663011c9b8e2a487ad0298b4fb08225df182ac853e075aa67e7134b59"
