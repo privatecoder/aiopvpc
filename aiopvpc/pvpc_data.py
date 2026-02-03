@@ -325,21 +325,31 @@ class PVPCData:  # pylint: disable=too-many-instance-attributes
 
     async def _async_prewarm_holidays(self, local_now: datetime) -> None:
         """Populate holiday cache off-loop to avoid blocking in period helpers."""
-        for year in (local_now.year, local_now.year + 1):
-            if year in self._warmed_holiday_years:
-                continue
-            national_holidays = await asyncio.to_thread(
-                _national_p3_holidays,
-                year,
-                self._holiday_source,
-            )
-            self._warmed_holiday_years.add(year)
+        year = local_now.year
+        if year in self._warmed_holiday_years:
             _LOGGER.debug(
-                "Holiday warmup year=%d source=%s count=%d",
+                "Holiday warmup skipped year=%d source=%s cached=True",
                 year,
                 self._holiday_source,
-                len(national_holidays),
             )
+            return
+        _LOGGER.debug(
+            "Holiday warmup start year=%d source=%s",
+            year,
+            self._holiday_source,
+        )
+        national_holidays = await asyncio.to_thread(
+            _national_p3_holidays,
+            year,
+            self._holiday_source,
+        )
+        self._warmed_holiday_years.add(year)
+        _LOGGER.debug(
+            "Holiday warmup year=%d source=%s count=%d",
+            year,
+            self._holiday_source,
+            len(national_holidays),
+        )
 
     async def _update_prices_series(  # pylint: disable=too-many-arguments
         self,

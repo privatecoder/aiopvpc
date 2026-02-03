@@ -31,10 +31,10 @@ def _price_period_key(
 ) -> str:
     """Return price period key (P1/P2/P3) for current hour."""
     day = local_ts.date()
-    national_holiday = day in _national_p3_holidays(day.year, holiday_source)
-    if national_holiday or day.isoweekday() >= 6:
+    if day.isoweekday() >= 6 or local_ts.hour < 8:
         return "P3"
-    if local_ts.hour < 8:
+    national_holiday = day in _national_p3_holidays(day.year, holiday_source)
+    if national_holiday:
         return "P3"
     if zone_ceuta_melilla and local_ts.hour in _PRICE_HOURS_P2_CYM:
         return "P2"
@@ -54,10 +54,10 @@ def _power_period_key(
 ) -> str:
     """Return power period key (P1/P3) for current hour."""
     day = local_ts.date()
-    national_holiday = day in _national_p3_holidays(day.year, holiday_source)
-    if national_holiday or day.isoweekday() >= 6:
+    if day.isoweekday() >= 6 or local_ts.hour < 8:
         return "P3"
-    if local_ts.hour < 8:
+    national_holiday = day in _national_p3_holidays(day.year, holiday_source)
+    if national_holiday:
         return "P3"
     return "P1"
 
