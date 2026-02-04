@@ -1204,7 +1204,7 @@ holidays = ["holidays (>=0.89)"]
 type = "git"
 url = "https://github.com/privatecoder/spanish-pvpc-holidays.git"
 reference = "v1.1.0"
-resolved_reference = "d08fb1782799b7088190809ef191cbbae8c964c7"
+resolved_reference = "25b6efba62ee474caed00f356765293a8f6aa28f"
 
 [[package]]
 name = "termcolor"
