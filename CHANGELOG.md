@@ -1,5 +1,12 @@
 # Changelog
 
+## [v5.0.1](https://github.com/privatecoder/aiopvpc/tree/v5.0.1) - 🐛 Fix partial data on first load with API token (2026-02-22)
+
+[Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v5.0.0...v5.0.1)
+
+- 🐛 Fix partial sensor data on first coordinator refresh when using an API token: retry failed sensors after a short delay if some succeed and others are rate-limited
+- 🔧 Fix test mock compatibility with Python 3.13+
+
 ## [v5.0.0](https://github.com/privatecoder/aiopvpc/tree/v5.0.0) - 🚀 Replace holidays with spanish-pvpc-holidays (2026-02-04)
 
 [Full Changelog](https://github.com/privatecoder/aiopvpc/compare/v4.3.4...v5.0.0)

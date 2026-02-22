@@ -12,6 +12,7 @@ from aiopvpc.const import (
     ALL_SENSORS,
     ATTRIBUTIONS,
     DataSource,
+    ESIOS_PVPC,
     KEY_INJECTION,
     KEY_OMIE,
     KEY_PVPC,
@@ -182,3 +183,61 @@ async def test_reduced_api_download_rate(local_tz, data_source, sensor_keys):
         call_count += len(sensor_keys)
         assert mock_session.call_count == call_count
         check_num_datapoints(api_data, sensor_keys, 24)
+
+
+class _RateLimitedPVPCSession(MockAsyncSession):
+    """Mock session that fails PVPC on first call, succeeds on retry."""
+
+    def __init__(self):
+        super().__init__(status=200)
+        self._pvpc_attempts = 0
+
+    def _resolve_url(self, url: str):
+        prefix_token = "https://api.esios.ree.es/indicators/"
+        if url.startswith(prefix_token):
+            indicator = url.removeprefix(prefix_token).split("?")[0]
+            if indicator == ESIOS_PVPC:
+                self._pvpc_attempts += 1
+                if self._pvpc_attempts == 1:
+                    # Simulate rate-limit: first PVPC call times out
+                    self._counter += 1
+                    raise TimeoutError
+        super()._resolve_url(url)
+
+
+@pytest.mark.asyncio
+async def test_first_load_retry_on_partial_failure(caplog):
+    """Test that first load retries failed sensors after partial success.
+
+    Simulates the scenario where config flow just verified the API token
+    (fetching PVPC) and the first coordinator refresh gets rate-limited
+    on the PVPC call while the INJECTION call succeeds.
+    The retry logic should recover PVPC data on the same update cycle.
+    """
+    start = datetime(2021, 10, 30, 15, tzinfo=UTC_TZ)
+    mock_session = _RateLimitedPVPCSession()
+    pvpc_data = PVPCData(
+        session=mock_session,
+        tariff="2.0TD",
+        local_timezone=REFERENCE_TZ,
+        data_source=cast(DataSource, "esios"),
+        api_token="test-token",
+        sensor_keys=(KEY_PVPC, KEY_INJECTION),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        api_data = await pvpc_data.async_update_all(None, start)
+
+    # Both sensors should be available after retry
+    assert api_data.availability.get(KEY_PVPC, False), (
+        "PVPC should be available after retry"
+    )
+    assert api_data.availability.get(KEY_INJECTION, False), (
+        "INJECTION should be available"
+    )
+    assert len(api_data.sensors[KEY_PVPC]) == 24
+    assert len(api_data.sensors[KEY_INJECTION]) == 24
+
+    # PVPC was called twice (first fail + retry), INJECTION once
+    assert mock_session._pvpc_attempts == 2
+    assert "First load: retrying" in caplog.text

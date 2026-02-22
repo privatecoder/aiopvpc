@@ -45,22 +45,27 @@ _DEFAULT_EMPTY_VALUE = {"message": "No values for specified archive"}
 _DEFAULT_UNAUTH_MSG = "HTTP Token: Access denied (TEST)."
 
 
+class _MockResponse:
+    """Async context manager returned by MockAsyncSession.get()."""
+
+    def __init__(self, session, url):
+        self._session = session
+        self._url = url
+
+    async def __aenter__(self):
+        self._session._resolve_url(self._url)
+        return self._session
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
 class MockAsyncSession:
     """Mock GET requests to esios API."""
 
     status: int = 200
     _counter: int = 0
     _raw_response = None
-
-    def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def __await__(self):
-        yield
-        return self
 
     async def close(self, *_args):
         pass
@@ -106,8 +111,8 @@ class MockAsyncSession:
         """Dumb await."""
         return self._raw_response
 
-    async def get(self, url: str, *_args, **_kwargs):
-        """Dumb await."""
+    def _resolve_url(self, url: str):
+        """Resolve URL to set the appropriate response data."""
         self._counter += 1
         if self.exc:
             raise self.exc
@@ -124,7 +129,10 @@ class MockAsyncSession:
             self._raw_response = self.responses_public[key]
         else:
             self._raw_response = _DEFAULT_EMPTY_VALUE
-        return self
+
+    def get(self, url: str, *_args, **_kwargs):
+        """Return an async context manager for the request."""
+        return _MockResponse(self, url)
 
     @property
     def call_count(self) -> int:
