@@ -63,7 +63,7 @@ async def test_disable_sensors():
 
     api_data = None
     start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
-    assert mock_session.call_count == 10
+    assert mock_session.call_count == 5
     check_num_datapoints(api_data, sensor_keys, 24)
 
     pvpc_data.update_active_sensors(KEY_PVPC, enabled=False)
@@ -73,23 +73,23 @@ async def test_disable_sensors():
     pvpc_data.update_active_sensors(KEY_ADJUSTMENT, enabled=False)
 
     start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
-    assert mock_session.call_count == 11
+    assert mock_session.call_count == 6
     check_num_datapoints(api_data, sensor_keys, 24)
     logging.error(api_data.sensors.keys())
 
     pvpc_data.update_active_sensors(KEY_INJECTION, enabled=False)
     start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
-    assert mock_session.call_count == 11
+    assert mock_session.call_count == 6
     check_num_datapoints(api_data, sensor_keys, 24)
 
     start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
-    assert mock_session.call_count == 11
+    assert mock_session.call_count == 6
     check_num_datapoints(api_data, sensor_keys, 24)
 
     start, api_data = await run_h_step(
         mock_session, pvpc_data, api_data, start, should_fail=True
     )
-    assert mock_session.call_count == 11
+    assert mock_session.call_count == 6
     # check_num_datapoints(api_data, sensor_keys, 0)
 
     pvpc_data.update_active_sensors(KEY_INJECTION, enabled=True)
@@ -97,14 +97,14 @@ async def test_disable_sensors():
     start, api_data = await run_h_step(
         mock_session, pvpc_data, api_data, start, should_fail=True
     )
-    assert mock_session.call_count == 13
+    assert mock_session.call_count == 8
 
     pvpc_data.update_active_sensors(KEY_INJECTION, enabled=True)
     pvpc_data.update_active_sensors(KEY_PVPC, enabled=True)
     pvpc_data.update_active_sensors(KEY_MAG, enabled=True)
     pvpc_data.update_active_sensors(KEY_OMIE, enabled=True)
     await run_h_step(mock_session, pvpc_data, api_data, start, should_fail=True)
-    assert mock_session.call_count == 17
+    assert mock_session.call_count == 12
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,12 @@ poetry run aiopvpc-tariff --source python-holidays
 
 ---
 
+## Fetch schedule
+
+REE publishes next-day PVPC prices daily at 20:15 (Europe/Madrid). To allow for propagation delays, `aiopvpc` waits until 20:20 before attempting to fetch tomorrow's prices.
+
+---
+
 ## License
 
 MIT License. See the [LICENSE](LICENSE) file.

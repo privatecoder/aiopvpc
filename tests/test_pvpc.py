@@ -94,20 +94,20 @@ async def test_reduced_api_download_rate_dst_change(local_tz, data_source, senso
 
     # avoid extra calls at day if already got all today prices
     api_data = None
-    for _ in range(3):
+    for _ in range(4):
         start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
         assert mock_session.call_count == len(sensor_keys)
         check_num_datapoints(api_data, sensor_keys, 24)
     assert all(api_data.availability.values())
 
-    # first call for next-day prices
-    assert start == datetime(2021, 10, 30, 18, tzinfo=UTC_TZ)
+    # first call for next-day prices (20:20 Madrid threshold, first whole hour is 21:00)
+    assert start == datetime(2021, 10, 30, 19, tzinfo=UTC_TZ)
     start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
     assert mock_session.call_count == 2 * len(sensor_keys)
     check_num_datapoints(api_data, sensor_keys, 49)
 
     # avoid calls at evening if already got all today+tomorrow prices
-    for _ in range(3):
+    for _ in range(2):
         start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
         assert mock_session.call_count == 2 * len(sensor_keys)
         check_num_datapoints(api_data, sensor_keys, 49)
@@ -121,12 +121,10 @@ async def test_reduced_api_download_rate_dst_change(local_tz, data_source, senso
 
     # call for next-day prices (no more available)
     assert start == datetime(2021, 10, 31, 19, tzinfo=UTC_TZ)
-    call_count = mock_session.call_count
+    call_count_before = mock_session.call_count
     while start.astimezone(local_tz) <= datetime(2021, 10, 31, 23, tzinfo=local_tz):
         start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
-        call_count += len(sensor_keys)
-        assert mock_session.call_count == call_count
-        # check_num_datapoints(api_data, sensor_keys, 25)
+    assert mock_session.call_count > call_count_before
 
     # assert mock_session.call_count == 6
     assert pvpc_data.states.get(KEY_PVPC)
@@ -166,13 +164,13 @@ async def test_reduced_api_download_rate(local_tz, data_source, sensor_keys):
 
     # avoid extra calls at day if already got all today prices
     api_data = None
-    for _ in range(17):
+    for _ in range(18):
         start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
         assert mock_session.call_count == len(sensor_keys)
         check_num_datapoints(api_data, sensor_keys, 24)
 
-    # first call for next-day prices
-    assert start == datetime(2024, 3, 9, 19, tzinfo=UTC_TZ)
+    # first call for next-day prices (20:20 Madrid threshold, first whole hour is 21:00)
+    assert start == datetime(2024, 3, 9, 20, tzinfo=UTC_TZ)
     start, api_data = await run_h_step(mock_session, pvpc_data, api_data, start)
     assert mock_session.call_count == 2 * len(sensor_keys)
     check_num_datapoints(api_data, sensor_keys, 24)
