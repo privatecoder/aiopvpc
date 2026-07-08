@@ -7,7 +7,10 @@ import logging
 import pathlib
 import zoneinfo
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
+
+import aiohttp
 
 from aiopvpc.const import (
     ESIOS_INJECTION,
@@ -70,11 +73,13 @@ class MockAsyncSession:
     async def close(self, *_args):
         pass
 
-    def __init__(self, status=200, exc=None):
+    def __init__(self, status=200, exc=None, content_type="application/json"):
         """Set up desired mock response"""
         self._raw_response = _DEFAULT_EMPTY_VALUE
         self.status = status
         self.exc = exc
+        self.content_type = content_type
+        self._last_url = ""
 
         self.responses_public = {
             date(2022, 3, 27): load_fixture(_FIXTURE_DATA_2022_03_27),
@@ -108,12 +113,29 @@ class MockAsyncSession:
         }
 
     async def json(self, *_args, **_kwargs):
-        """Dumb await."""
+        """Emulate aiohttp's strict content-type check in ClientResponse.json()."""
+        if self.content_type != "application/json":
+            raise aiohttp.ContentTypeError(
+                SimpleNamespace(real_url=self._last_url),
+                (),
+                status=self.status,
+                message=(
+                    "Attempt to decode JSON with unexpected mimetype: "
+                    f"{self.content_type}"
+                ),
+            )
         return self._raw_response
+
+    async def read(self, *_args, **_kwargs):
+        """Return the raw body bytes, like aiohttp's ClientResponse.read()."""
+        if isinstance(self._raw_response, (bytes, bytearray)):
+            return bytes(self._raw_response)
+        return json.dumps(self._raw_response).encode()
 
     def _resolve_url(self, url: str):
         """Resolve URL to set the appropriate response data."""
         self._counter += 1
+        self._last_url = url
         if self.exc:
             raise self.exc
 

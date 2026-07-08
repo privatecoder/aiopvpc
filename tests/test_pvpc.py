@@ -1,8 +1,10 @@
 """Tests for aiopvpc."""
 
+import io
 import logging
+import zipfile
 from asyncio import TimeoutError
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import cast
 
 import pytest
@@ -20,7 +22,14 @@ from aiopvpc.const import (
     UTC_TZ,
 )
 from aiopvpc.pvpc_data import BadApiTokenAuthError, PVPCData
-from tests.conftest import check_num_datapoints, MockAsyncSession, run_h_step, TZ_TEST
+from tests.conftest import (
+    check_num_datapoints,
+    load_fixture,
+    MockAsyncSession,
+    run_h_step,
+    TEST_EXAMPLES_PATH,
+    TZ_TEST,
+)
 
 
 @pytest.mark.parametrize(
@@ -65,6 +74,100 @@ async def test_bad_downloads(
         assert len(caplog.messages) == num_log_msgs
     assert mock_session.call_count == 1
     check_num_datapoints(api_data, (KEY_PVPC,), 0)
+
+
+_PUBLIC_FIXTURE_2021_06_01 = "PVPC_CURV_DD_2021_06_01.json"
+
+
+def _make_zip(member_name: str | None, payload: bytes = b"") -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        if member_name is not None:
+            zf.writestr(member_name, payload)
+    return buffer.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_public_download_with_bad_content_type_header():
+    """Issue #13: 200 responses with `Content-Type: json` must still parse."""
+    day = datetime(2021, 6, 1, 9, tzinfo=REFERENCE_TZ)
+    mock_session = MockAsyncSession(content_type="json")
+    pvpc_data = PVPCData(
+        session=mock_session,
+        tariff="2.0TD",
+        data_source=cast(DataSource, "esios_public"),
+    )
+
+    api_data = await pvpc_data.async_update_all(None, day)
+    assert len(api_data.sensors[KEY_PVPC]) == 24
+    assert pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, day)
+    assert api_data.availability[KEY_PVPC]
+
+
+@pytest.mark.asyncio
+async def test_public_download_zip_wrapped_payload_keeps_dia_timestamps():
+    """Issue #13: ZIP-wrapped payloads parse with timestamps from inner `Dia`.
+
+    Pins the no-shift decision: the member is dated 2021-06-01 and the inner
+    `Dia` field is 01/06/2021, so prices must land on 2021-06-01 exactly,
+    never on `Dia` + 1 day.
+    """
+    day = datetime(2021, 6, 1, 9, tzinfo=REFERENCE_TZ)
+    raw_payload = (TEST_EXAMPLES_PATH / _PUBLIC_FIXTURE_2021_06_01).read_bytes()
+    mock_session = MockAsyncSession(content_type="application/zip")
+    mock_session.responses_public[date(2021, 6, 1)] = _make_zip(
+        "PVPC_CURV_DD_20210601", raw_payload
+    )
+    pvpc_data = PVPCData(
+        session=mock_session,
+        tariff="2.0TD",
+        data_source=cast(DataSource, "esios_public"),
+    )
+
+    api_data = await pvpc_data.async_update_all(None, day)
+    prices = api_data.sensors[KEY_PVPC]
+    assert len(prices) == 24
+
+    inner = load_fixture(_PUBLIC_FIXTURE_2021_06_01)
+    assert inner["PVPC"][0]["Dia"] == "01/06/2021"
+    ts_first = datetime(2021, 6, 1, 0, tzinfo=REFERENCE_TZ).astimezone(UTC_TZ)
+    expected_first = round(
+        float(inner["PVPC"][0]["PCB"].replace(",", ".")) / 1000.0, 5
+    )
+    assert min(prices) == ts_first
+    assert max(prices) == ts_first + timedelta(hours=23)
+    assert prices[ts_first] == expected_first
+    assert pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, day)
+
+
+@pytest.mark.parametrize(
+    "body, expected_log",
+    (
+        (b"<html><body>Under maintenance</body></html>", "Non-JSON payload"),
+        (b"PK\x03\x04 this is not really a zipfile", "Corrupt ZIP payload"),
+        (_make_zip("OTHER_FILE.txt", b"not json at all"), "Non-JSON payload"),
+        # an empty ZIP archive starts with PK\x05\x06, so it is not
+        # sniffed as ZIP and fails the JSON decode instead
+        (_make_zip(None), "Non-JSON payload"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_public_download_garbage_payload(body, expected_log, caplog):
+    """Issue #13: malformed 200 payloads degrade to None + warning, no raise."""
+    day = datetime(2021, 6, 1, 9, tzinfo=REFERENCE_TZ)
+    mock_session = MockAsyncSession()
+    mock_session.responses_public[date(2021, 6, 1)] = body
+    pvpc_data = PVPCData(
+        session=mock_session,
+        tariff="2.0TD",
+        data_source=cast(DataSource, "esios_public"),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="aiopvpc"):
+        api_data = await pvpc_data.async_update_all(None, day)
+    assert not api_data.sensors[KEY_PVPC]
+    assert expected_log in caplog.text
+    assert not pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, day)
 
 
 # TODO review download schedule for Canary Islands TZ
