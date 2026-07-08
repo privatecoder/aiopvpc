@@ -43,20 +43,25 @@ markers = [
     "real_api_call: Tests making requests to api.esios.ree.es (deselected by default)",
 ]
 
-[tool.poetry]
+[project]
 name = "aiopvpc"
 version = "5.0.2"
 description = "Retrieval of Spanish Electricity hourly prices (PVPC)"
-authors = ["privatecoder"]
+authors = [{ name = "privatecoder" }]
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "aiohttp (>=3.7.4.post0,<4.0.0)",
+    "holidays (>=0.89,<1.0)",
+    "spanish-pvpc-holidays @ git+https://github.com/privatecoder/spanish-pvpc-holidays.git@25b6efba62ee474caed00f356765293a8f6aa28f",
+]
+
+[project.urls]
 repository = "https://github.com/privatecoder/aiopvpc"
 
-[tool.poetry.dependencies]
-python = ">=3.11,<4.0"
-aiohttp = ">=3.7.4.post0,<4.0.0"
-holidays = ">=0.89,<1.0"
-spanish-pvpc-holidays = { git = "https://github.com/privatecoder/spanish-pvpc-holidays.git", rev = "25b6efba62ee474caed00f356765293a8f6aa28f" }
+[project.scripts]
+aiopvpc-tariff = "aiopvpc.cli:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.2"
@@ -69,9 +74,13 @@ python-dotenv = "^1.2.1"
 ruff = "^0.15.20"
 mypy = "^2.2.0"
 
-[tool.poetry.scripts]
-aiopvpc-tariff = "aiopvpc.cli:main"
+[tool.mypy]
+python_version = "3.11"
+
+[[tool.mypy.overrides]]
+module = ["pvpc_holidays", "pvpc_holidays.*"]
+ignore_missing_imports = true
 
 [build-system]
-requires = ["poetry_core>=1.0.0"]
+requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
