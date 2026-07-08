@@ -45,7 +45,7 @@ markers = [
 
 [project]
 name = "aiopvpc"
-version = "5.0.2"
+version = "5.1.0"
 description = "Retrieval of Spanish Electricity hourly prices (PVPC)"
 authors = [{ name = "privatecoder" }]
 license = "MIT"
