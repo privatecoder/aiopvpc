@@ -1,5 +1,7 @@
 """Tests for aiopvpc."""
 
+import logging
+import zoneinfo
 from datetime import datetime, timedelta
 from typing import cast
 
@@ -8,16 +10,24 @@ import pytest
 from aiopvpc.const import (
     ALL_SENSORS,
     DataSource,
+    EsiosApiData,
     KEY_ADJUSTMENT,
+    KEY_INDEXED,
     KEY_INJECTION,
     KEY_MAG,
     KEY_OMIE,
     KEY_PVPC,
     REFERENCE_TZ,
     SENSOR_KEY_TO_DATAID,
+    TARIFFS,
     UTC_TZ,
 )
-from aiopvpc.prices import _split_today_tomorrow_prices, make_price_sensor_attributes
+from aiopvpc.parser import extract_esios_data
+from aiopvpc.prices import (
+    _split_today_tomorrow_prices,
+    add_composed_price_sensors,
+    make_price_sensor_attributes,
+)
 from aiopvpc.pvpc_data import PVPCData
 from tests.conftest import MockAsyncSession, TZ_TEST
 
@@ -61,6 +71,93 @@ def test_tomorrow_price_split_sunday_to_monday():
     today, tomorrow = _split_today_tomorrow_prices(prices, utc_time, REFERENCE_TZ)
     assert not tomorrow
     assert len(today) == 48
+
+
+def test_composed_indexed_sensor_cleared_when_sources_unavailable():
+    """Stale INDEXED prices are dropped when a source series disappears."""
+    ts = datetime(2024, 3, 9, 10, tzinfo=UTC_TZ)
+    data = EsiosApiData(
+        last_update=ts,
+        data_source="esios",
+        sensors={
+            KEY_PVPC: {ts: 0.2},
+            KEY_ADJUSTMENT: {ts: 0.05},
+        },
+        availability={KEY_PVPC: True, KEY_ADJUSTMENT: True},
+    )
+    add_composed_price_sensors(data)
+    assert data.sensors[KEY_INDEXED] == {ts: 0.15}
+    assert data.availability[KEY_INDEXED]
+
+    data.availability[KEY_ADJUSTMENT] = False
+    add_composed_price_sensors(data)
+    assert data.sensors[KEY_INDEXED] == {}
+    assert not data.availability[KEY_INDEXED]
+
+
+_TOKEN_URL = "https://api.esios.ree.es/indicators/1001?start_date=2024-03-09T00:00"
+
+
+def _token_payload() -> dict:
+    return {
+        "indicator": {
+            "name": "PVPC test",
+            "id": 1001,
+            "magnitud": [{"name": "Precio"}],
+            "tiempo": [{"name": "Hora"}],
+            "values": [
+                {
+                    "geo_id": 8741,  # Península
+                    "datetime": "2024-03-09T10:00:00+01:00",
+                    "value": 100.0,
+                },
+                {
+                    "geo_id": 8742,  # Canarias
+                    "datetime": "2024-03-09T10:00:00+01:00",
+                    "value": 200.0,
+                },
+                {
+                    "geo_id": 8744,  # Ceuta
+                    "datetime": "2024-03-09T10:00:00+01:00",
+                    "value": 300.0,
+                },
+            ],
+        }
+    }
+
+
+def test_token_geo_zone_selection_is_explicit(caplog):
+    """Geo zone follows tariff + local timezone; unknown tz -> Península."""
+    madrid = zoneinfo.ZoneInfo("Europe/Madrid")
+    canary = zoneinfo.ZoneInfo("Atlantic/Canary")
+
+    res = extract_esios_data(
+        _token_payload(), _TOKEN_URL, KEY_PVPC, TARIFFS[0], tz=madrid
+    )
+    assert list(res.series[KEY_PVPC].values()) == [0.1]
+
+    res = extract_esios_data(
+        _token_payload(), _TOKEN_URL, KEY_PVPC, TARIFFS[0], tz=canary
+    )
+    assert list(res.series[KEY_PVPC].values()) == [0.2]
+
+    res = extract_esios_data(
+        _token_payload(), _TOKEN_URL, KEY_PVPC, TARIFFS[1], tz=madrid
+    )
+    assert list(res.series[KEY_PVPC].values()) == [0.3]
+
+    # an unrecognized timezone stays functional: Península is assumed,
+    # with a warning
+    with caplog.at_level(logging.WARNING, logger="aiopvpc"):
+        res = extract_esios_data(
+            _token_payload(),
+            _TOKEN_URL,
+            KEY_PVPC,
+            TARIFFS[0],
+            tz=zoneinfo.ZoneInfo("Europe/Lisbon"),
+        )
+    assert list(res.series[KEY_PVPC].values()) == [0.1]
+    assert "not a recognized Spanish zone" in caplog.text
 
 
 @pytest.mark.parametrize(
