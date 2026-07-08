@@ -15,9 +15,52 @@ from aiopvpc.const import (
     KEY_PVPC,
     REFERENCE_TZ,
     SENSOR_KEY_TO_DATAID,
+    UTC_TZ,
 )
+from aiopvpc.prices import _split_today_tomorrow_prices, make_price_sensor_attributes
 from aiopvpc.pvpc_data import PVPCData
 from tests.conftest import MockAsyncSession, TZ_TEST
+
+
+def _hourly_prices(day0: datetime, base: float) -> dict[datetime, float]:
+    return {
+        (day0 + timedelta(hours=i)).astimezone(UTC_TZ): round(base + i / 1000, 5)
+        for i in range(24)
+    }
+
+
+def test_tomorrow_price_split_year_boundary():
+    """Pin the today/tomorrow split across Dec 31 -> Jan 1 (ISO week 53).
+
+    2026-12-31 is ISO 2026-W53-4 and 2027-01-01 is ISO 2026-W53-5, so
+    calendar-date comparison must classify Jan 1 as next-day.
+    """
+    dec31 = datetime(2026, 12, 31, tzinfo=REFERENCE_TZ)
+    jan1 = datetime(2027, 1, 1, tzinfo=REFERENCE_TZ)
+    prices = {**_hourly_prices(dec31, 0.1), **_hourly_prices(jan1, 0.2)}
+    utc_time = dec31.replace(hour=12).astimezone(UTC_TZ)
+
+    attrs = make_price_sensor_attributes(KEY_PVPC, prices, utc_time, REFERENCE_TZ)
+    next_day_tags = {key for key in attrs if key.startswith("price_next_day_")}
+    assert len(next_day_tags) == 24
+    assert attrs["price_next_day_00h"] == prices[jan1.astimezone(UTC_TZ)]
+    assert attrs["price_00h"] == prices[dec31.astimezone(UTC_TZ)]
+
+
+def test_tomorrow_price_split_sunday_to_monday():
+    """Past prices must never be tagged as next-day.
+
+    Regression: the old isocalendar-based comparison classified a Sunday
+    (ISO day 7) as 'tomorrow' relative to the following Monday (ISO day 1).
+    """
+    sunday = datetime(2027, 1, 3, tzinfo=REFERENCE_TZ)  # ISO 2026-W53-7
+    monday = datetime(2027, 1, 4, tzinfo=REFERENCE_TZ)  # ISO 2027-W01-1
+    prices = {**_hourly_prices(sunday, 0.1), **_hourly_prices(monday, 0.2)}
+    utc_time = monday.replace(hour=10).astimezone(UTC_TZ)
+
+    today, tomorrow = _split_today_tomorrow_prices(prices, utc_time, REFERENCE_TZ)
+    assert not tomorrow
+    assert len(today) == 48
 
 
 @pytest.mark.parametrize(

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
 from datetime import datetime
-from typing import cast
+from typing import cast, TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from aiopvpc.const import REFERENCE_TZ
 from aiopvpc.pvpc_tariff import (
-    HolidaySource,
     get_current_and_next_power_periods,
     get_current_and_next_price_periods,
+    HolidaySource,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -61,7 +63,7 @@ def _parse_local_timestamp(timestamp: str | None, timezone_name: str) -> datetim
 def main(argv: Sequence[str] | None = None) -> int:
     """Run CLI command."""
     args = _build_parser().parse_args(argv)
-    holiday_source = cast(HolidaySource, args.source)
+    holiday_source = cast("HolidaySource", args.source)
     local_ts = _parse_local_timestamp(args.timestamp, args.timezone)
 
     current_period, next_period, price_delta = get_current_and_next_price_periods(

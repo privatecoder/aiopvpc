@@ -11,6 +11,10 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import aiohttp
+import pytest
+from pvpc_holidays import get_pvpc_holidays as _real_get_pvpc_holidays
+
+from aiopvpc.pvpc_tariff import _national_p3_holidays
 
 from aiopvpc.const import (
     ESIOS_INJECTION,
@@ -48,6 +52,31 @@ _DEFAULT_EMPTY_VALUE = {"message": "No values for specified archive"}
 _DEFAULT_UNAUTH_MSG = "HTTP Token: Access denied (TEST)."
 
 
+@pytest.fixture(autouse=True)
+def _offline_holiday_source(request, monkeypatch):
+    """Keep the suite hermetic: no live holiday downloads.
+
+    The 'csv' holiday source downloads from seg-social.es at runtime, so
+    unit tests redirect it to the offline 'python-holidays' source.
+    Live tests opt out via the `real_api_call` marker.
+    """
+    if "real_api_call" in request.keywords:
+        yield
+        return
+
+    def _offline_get_pvpc_holidays(year, source="csv", **kwargs):
+        if source == "csv":
+            source = "python-holidays"
+        return _real_get_pvpc_holidays(year, source=source, **kwargs)
+
+    _national_p3_holidays.cache_clear()
+    monkeypatch.setattr(
+        "aiopvpc.pvpc_tariff.get_pvpc_holidays", _offline_get_pvpc_holidays
+    )
+    yield
+    _national_p3_holidays.cache_clear()
+
+
 class _MockResponse:
     """Async context manager returned by MockAsyncSession.get()."""
 
@@ -69,9 +98,6 @@ class MockAsyncSession:
     status: int = 200
     _counter: int = 0
     _raw_response = None
-
-    async def close(self, *_args):
-        pass
 
     def __init__(self, status=200, exc=None, content_type="application/json"):
         """Set up desired mock response"""

@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 
 import pytest
+from pvpc_holidays import get_pvpc_holidays
 
 from aiopvpc.const import REFERENCE_TZ
 from aiopvpc.pvpc_tariff import get_current_and_next_tariff_periods
@@ -50,3 +51,11 @@ def test_default_holiday_source_is_csv(monkeypatch):
     get_current_and_next_tariff_periods(day, False)
 
     assert called["source"] == "csv"
+
+
+@pytest.mark.real_api_call
+def test_csv_holiday_source_live_download():
+    """Live download of the seg-social.es CSV feed (opt-in integration test)."""
+    year = datetime.now(REFERENCE_TZ).year
+    holidays = get_pvpc_holidays(year, source="csv")
+    assert holidays

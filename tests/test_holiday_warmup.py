@@ -38,11 +38,11 @@ async def test_holiday_warmup_uses_to_thread_before_period_helpers(monkeypatch):
         return {date(year, 1, 1)}
 
     def _fake_price_period(*_args, **_kwargs):
-        assert pvpc_data._warmed_holiday_years == {expected_year}
+        assert pvpc_data._warmed_holiday_years == {expected_year, expected_year + 1}
         return "P2", "P3", timedelta(hours=1)
 
     def _fake_power_period(*_args, **_kwargs):
-        assert pvpc_data._warmed_holiday_years == {expected_year}
+        assert pvpc_data._warmed_holiday_years == {expected_year, expected_year + 1}
         return "P1", "P3", timedelta(hours=1)
 
     monkeypatch.setattr(PVPCData, "_update_prices_series", _fake_update_prices_series)
@@ -55,7 +55,10 @@ async def test_holiday_warmup_uses_to_thread_before_period_helpers(monkeypatch):
     )
 
     await pvpc_data.async_update_all(None, now)
-    assert prewarm_calls == [(expected_year, "python-holidays")]
+    assert prewarm_calls == [
+        (expected_year, "python-holidays"),
+        (expected_year + 1, "python-holidays"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -80,7 +83,31 @@ async def test_holiday_warmup_not_repeated_in_same_year(monkeypatch):
     api_data = await pvpc_data.async_update_all(None, now)
     await pvpc_data.async_update_all(api_data, now + timedelta(hours=1))
 
-    assert prewarm_calls == [expected_year]
+    assert prewarm_calls == [expected_year, expected_year + 1]
+
+
+@pytest.mark.asyncio
+async def test_holiday_warmup_failure_does_not_break_update(monkeypatch, caplog):
+    """A failing holiday source must not crash the price update cycle."""
+    now = datetime(2024, 3, 9, 19, tzinfo=UTC_TZ)
+    pvpc_data = PVPCData(session=MockAsyncSession(), holiday_source="python-holidays")
+
+    async def _fake_update_prices_series(
+        _self, _sensor_key, current_prices, _url_now, _url_next, _local_ref_now
+    ):
+        return {**current_prices, now.replace(minute=0, second=0, microsecond=0): 0.123}
+
+    async def _failing_to_thread(_func, _year, _source):
+        raise OSError("holiday source down")
+
+    monkeypatch.setattr(PVPCData, "_update_prices_series", _fake_update_prices_series)
+    monkeypatch.setattr("aiopvpc.pvpc_data.asyncio.to_thread", _failing_to_thread)
+
+    api_data = await pvpc_data.async_update_all(None, now)
+
+    assert api_data.availability[KEY_PVPC]
+    assert pvpc_data._warmed_holiday_years == set()
+    assert "Holiday warmup failed" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -111,12 +138,14 @@ async def test_holiday_warmup_rollover_fetches_new_year_on_new_year(monkeypatch)
     )
 
     api_data = await pvpc_data.async_update_all(None, dec31_22)
-    assert [year for year, _thread_id in calls] == [2024]
+    # still 2024 in Madrid: current and next year get prewarmed
+    assert [year for year, _thread_id in calls] == [2024, 2025]
     assert all(thread_id != main_thread_id for _, thread_id in calls)
 
     api_data = await pvpc_data.async_update_all(api_data, dec31_23)
-    assert [year for year, _thread_id in calls] == [2024, 2025]
+    # Madrid rolled over to 2025: 2026 becomes the new "next year"
+    assert [year for year, _thread_id in calls] == [2024, 2025, 2026]
 
     state_ok = pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, dec31_23)
     assert state_ok
-    assert len(calls) == 2
+    assert len(calls) == 3

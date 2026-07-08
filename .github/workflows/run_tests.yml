@@ -7,22 +7,25 @@ jobs:
   test-flow:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.11
+          python-version: ${{ matrix.python-version }}
 
       - name: Run Poetry image
-        uses: abatilo/actions-poetry@v2.0.0
+        uses: abatilo/actions-poetry@0dd19c9498c3dc8728967849d0d2eae428a8a3d8 # v4
         with:
-          poetry-version: 1.7.1
+          poetry-version: 2.4.1
 
       - name: Install library
         run: poetry install --no-interaction
@@ -31,7 +34,8 @@ jobs:
         run: poetry run pytest --cov-report xml:coverage.xml
 
       - name: Get Cover
-        uses: orgoro/coverage@v3.1
+        if: matrix.python-version == '3.11'
+        uses: orgoro/coverage@3f13a558c5af7376496aa4848bf0224aead366ac # v3.2
         with:
           coverageFile: coverage.xml
           token: ${{ secrets.GITHUB_TOKEN }}

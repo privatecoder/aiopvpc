@@ -8,20 +8,21 @@ jobs:
   publish-flow:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.11
 
       - name: Run Poetry image
-        uses: abatilo/actions-poetry@v2.0.0
+        uses: abatilo/actions-poetry@0dd19c9498c3dc8728967849d0d2eae428a8a3d8 # v4
         with:
-          poetry-version: 1.7.1
+          poetry-version: 2.4.1
 
       - name: Install library
         run: poetry install --no-interaction
@@ -31,7 +32,7 @@ jobs:
 
         # publish version only when pyproject.toml is changed in master
       - name: Filter changes in pyproject
-        uses: dorny/paths-filter@v2
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: changes
         with:
           filters: |
@@ -44,4 +45,4 @@ jobs:
 
       - if: ${{ (github.ref == 'refs/heads/master') && (steps.changes.outputs.root == 'true')}}
         name: Publish release distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1

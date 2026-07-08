@@ -1,5 +1,6 @@
 """Tests for aiopvpc."""
 
+import asyncio
 import io
 import logging
 import zipfile
@@ -21,6 +22,7 @@ from aiopvpc.const import (
     REFERENCE_TZ,
     UTC_TZ,
 )
+from aiopvpc.parser import get_daily_urls_to_download
 from aiopvpc.pvpc_data import BadApiTokenAuthError, PVPCData
 from tests.conftest import (
     check_num_datapoints,
@@ -62,7 +64,7 @@ async def test_bad_downloads(
             data_source=cast(DataSource, data_source),
             api_token=api_token,
         )
-        if status in (401, 403):
+        if status == 401:
             with pytest.raises(BadApiTokenAuthError):
                 await pvpc_data.async_update_all(None, day)
             assert mock_session.call_count == 1
@@ -71,7 +73,12 @@ async def test_bad_downloads(
         api_data = await pvpc_data.async_update_all(None, day)
         assert not api_data.sensors[KEY_PVPC]
         assert not pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, day)
-        assert len(caplog.messages) == num_log_msgs
+        # Count only aiopvpc's own log records, ignoring dependency loggers
+        # (e.g. pvpc_holidays emits INFO warmup messages of its own).
+        own_log_records = [
+            record for record in caplog.records if record.name.startswith("aiopvpc")
+        ]
+        assert len(own_log_records) == num_log_msgs
     assert mock_session.call_count == 1
     check_num_datapoints(api_data, (KEY_PVPC,), 0)
 
@@ -138,6 +145,115 @@ async def test_public_download_zip_wrapped_payload_keeps_dia_timestamps():
     assert max(prices) == ts_first + timedelta(hours=23)
     assert prices[ts_first] == expected_first
     assert pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, day)
+
+
+def test_input_validation_raises():
+    """New ValueError contracts (former asserts)."""
+    with pytest.raises(ValueError, match="Unknown tariff"):
+        PVPCData(session=MockAsyncSession(), tariff="3.0TD")
+    with pytest.raises(ValueError, match="requires an API token"):
+        PVPCData(session=MockAsyncSession(), data_source="esios")
+    pvpc_data = PVPCData(session=MockAsyncSession())
+    with pytest.raises(ValueError, match="Unknown sensor"):
+        pvpc_data.update_active_sensors("BOGUS", enabled=True)
+
+    day = datetime(2021, 6, 1, tzinfo=REFERENCE_TZ)
+    with pytest.raises(ValueError, match="Public API only supports"):
+        get_daily_urls_to_download(
+            cast(DataSource, "esios_public"), [KEY_PVPC, KEY_OMIE], day, day
+        )
+    with pytest.raises(ValueError, match="Unknown data source"):
+        get_daily_urls_to_download(cast(DataSource, "bogus"), [KEY_PVPC], day, day)
+
+
+@pytest.mark.parametrize(
+    "payload, expected_log",
+    (
+        ("under maintenance", "Unexpected JSON payload type"),
+        (
+            {
+                "PVPC": [
+                    {"Dia": "not-a-date", "Hora": "00-01", "PCB": "116,33", "CYM": "116,33"}
+                ]
+            },
+            "Malformed response",
+        ),
+        (
+            {
+                "PVPC": [
+                    {"Dia": "01/06/2021", "Hora": "00-01", "PCB": "not-a-price", "CYM": "x"}
+                ]
+            },
+            "Malformed response",
+        ),
+    ),
+)
+@pytest.mark.asyncio
+async def test_malformed_public_payload_degrades(payload, expected_log, caplog):
+    """Valid-JSON-wrong-shape payloads degrade to warn+None, never crash."""
+    day = datetime(2021, 6, 1, 9, tzinfo=REFERENCE_TZ)
+    mock_session = MockAsyncSession()
+    mock_session.responses_public[date(2021, 6, 1)] = payload
+    pvpc_data = PVPCData(
+        session=mock_session,
+        tariff="2.0TD",
+        data_source=cast(DataSource, "esios_public"),
+    )
+    with caplog.at_level(logging.WARNING, logger="aiopvpc"):
+        api_data = await pvpc_data.async_update_all(None, day)
+    assert not api_data.sensors[KEY_PVPC]
+    assert expected_log in caplog.text
+    assert not pvpc_data.process_state_and_attributes(api_data, KEY_PVPC, day)
+
+
+@pytest.mark.asyncio
+async def test_malformed_sensor_does_not_affect_others(monkeypatch, caplog):
+    """A malformed payload for one sensor must not kill the whole update."""
+    start = datetime(2021, 10, 30, 15, tzinfo=UTC_TZ)
+    mock_session = MockAsyncSession()
+    mock_session.responses_token[ESIOS_PVPC][date(2021, 10, 30)] = "gone fishing"
+
+    async def _no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)  # skip first-load retry delay
+    pvpc_data = PVPCData(
+        session=mock_session,
+        data_source=cast(DataSource, "esios"),
+        api_token="test-token",
+        sensor_keys=(KEY_PVPC, KEY_INJECTION),
+    )
+    with caplog.at_level(logging.WARNING, logger="aiopvpc"):
+        api_data = await pvpc_data.async_update_all(None, start)
+
+    assert len(api_data.sensors[KEY_INJECTION]) == 24
+    assert api_data.availability[KEY_INJECTION]
+    assert not api_data.sensors[KEY_PVPC]
+    assert not api_data.availability[KEY_PVPC]
+    assert "Unexpected JSON payload type" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_failed_refetch_keeps_cached_prices_and_last_update():
+    """A failed re-download must not refresh last_update or availability."""
+    day1 = datetime(2021, 6, 1, 9, tzinfo=REFERENCE_TZ)
+    day2 = datetime(2021, 6, 2, 9, tzinfo=REFERENCE_TZ)
+    mock_session = MockAsyncSession()
+    pvpc_data = PVPCData(
+        session=mock_session,
+        tariff="2.0TD",
+        data_source=cast(DataSource, "esios_public"),
+    )
+    api_data = await pvpc_data.async_update_all(None, day1)
+    assert len(api_data.sensors[KEY_PVPC]) == 24
+    assert api_data.availability[KEY_PVPC]
+    first_update = api_data.last_update
+
+    # no data published for 2021-06-02 in the mock -> failed fetch
+    api_data = await pvpc_data.async_update_all(api_data, day2)
+    assert api_data.last_update == first_update
+    assert len(api_data.sensors[KEY_PVPC]) == 24  # cached prices kept
+    assert not api_data.availability[KEY_PVPC]  # but no price for current hour
 
 
 @pytest.mark.parametrize(
